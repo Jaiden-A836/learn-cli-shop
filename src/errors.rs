@@ -1,3 +1,5 @@
+use std::io;
+
 #[derive(Debug)]
 pub enum CommandError {
     EmptyInput,
@@ -7,7 +9,7 @@ pub enum CommandError {
 }
 
 impl CommandError {
-    pub fn handle_errors(&self) {
+    pub fn handle_error(&self) {
         match self {
             CommandError::EmptyInput => eprintln!("Please provide a command."),
             CommandError::UnknownCommand(cmd) => {

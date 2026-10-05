@@ -1,7 +1,9 @@
+//! Main loop of the program.
+
 use crate::commands::Command;
 use crate::errors::CommandError;
-use strum::IntoEnumIterator;
 use std::io::{self, Write};
+use strum::IntoEnumIterator;
 
 pub fn main_loop() {
     loop {
@@ -23,15 +25,17 @@ pub fn main_loop() {
 
             Err(CommandError::EmptyInput) => continue,
             Err(CommandError::UnknownCommand(cmd)) => {
-                CommandError::UnknownCommand(cmd).handle_errors();
+                CommandError::UnknownCommand(cmd).handle_error();
             }
             Err(CommandError::MissingArgument(msg)) => {
-                CommandError::MissingArgument(msg).handle_errors();
+                CommandError::MissingArgument(msg).handle_error();
             }
+            _ => {}
         }
     }
 }
 
+/// Prints the help information for available commands.
 fn print_help() {
     println!("Available commands:");
     for cmd in Command::iter() {
@@ -40,6 +44,7 @@ fn print_help() {
     println!();
 }
 
+/// Parses the input string and returns a 'Command' enum value or an error.
 fn parse_command(input: &str) -> Result<Command, CommandError> {
     let mut parts = input.trim().split_whitespace();
 
