@@ -7,7 +7,7 @@ use std::io::{self, Write};
 pub fn main_loop() {
     let mut registry = CommandRegistry::new();
     registry.register(CommandType::Help, Box::new(HelpCommand));
-    registry.register(CommandType::Help, Box::new(QuitCommand));
+    registry.register(CommandType::Quit, Box::new(QuitCommand));
 
     loop {
         print!("> ");
@@ -24,7 +24,7 @@ pub fn main_loop() {
         }
 
         // Parse input string into a CommandType
-        match parse_command(input.trim()) {
+        match CommandType::try_from(input.trim()) {
             Ok(cmd_type) => {
                 // Dispatch execution to command registry
                 if let Err(err) = registry.dispatch(&cmd_type) {
@@ -34,18 +34,5 @@ pub fn main_loop() {
             Err(CommandError::EmptyInput) => continue,
             Err(err) => eprintln!("{}", err),
         }
-    }
-}
-
-fn parse_command(input: &str) -> Result<CommandType, CommandError> {
-    let mut parts = input.trim().split_whitespace();
-
-    // Returns `CommandError::EmptyInput` if user hits Enter on blank line
-    let cmd_str = parts.next().ok_or(CommandError::EmptyInput)?;
-
-    match cmd_str {
-        "help" => Ok(CommandType::Help),
-        "quit" => Ok(CommandType::Quit),
-        _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
     }
 }

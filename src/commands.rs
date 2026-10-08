@@ -31,6 +31,23 @@ pub trait Command {
     fn description(&self) -> &'static str;
 }
 
+impl TryFrom<&str> for CommandType {
+    type Error = CommandError;
+
+    fn try_from(input: &str) -> Result<Self, Self::Error> {
+        let mut parts = input.trim().split_whitespace();
+
+        // Returns `CommandError::EmptyInput` if user hits Enter on blank line
+        let cmd_str = parts.next().ok_or(CommandError::EmptyInput)?.to_lowercase();
+
+        match cmd_str.as_str() {
+            "help" => Ok(CommandType::Help),
+            "quit" => Ok(CommandType::Quit),
+            _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
+        }
+    }
+}
+
 impl Command for HelpCommand {
     fn execute(&mut self, ctx: &CommandContext) -> Result<(), CommandError> {
         if CommandType::iter().count() == 0 {
