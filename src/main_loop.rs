@@ -36,11 +36,11 @@ pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
             Ok(cmd_type) => {
                 // Dispatch execution to command registry
                 if let Err(err) = registry.dispatch(&cmd_type) {
-                    eprintln!("{}", err);
+                    writeln!(writer, "{}", err).unwrap();
                 }
             }
             Err(CommandError::EmptyInput) => continue,
-            Err(err) => eprintln!("{}", err),
+            Err(err) => writeln!(writer, "{}", err).unwrap(),
         }
     }
 }
@@ -48,26 +48,36 @@ pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
+    use proptest::{proptest};
 
-    #[test]
-    fn run_loop_exits_on_quit_command() {
-        let input = "quit\n";
-        let mut output = Vec::new();
+    #[rstest]
+    #[case("help\n", "Available commands:")]
+    #[case("bad_cmd\n", "Unknown command:")]
+    #[case("\n", "> ")]
+    #[case("", "Goodbye!")]
+    fn run_loop_behavior(#[case] input: &str, #[case] expected_output: &str) {
+        let mut output_buffer = Vec::new();
+        run_loop(input.as_bytes(), &mut output_buffer);
 
-        run_loop(input.as_bytes(), &mut output);
+        let output_str = String::from_utf8(output_buffer).unwrap();
 
-        let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("> "));
+        assert_eq!(output_str, expected_output);
     }
 
-    #[test]
-    fn run_loop_prints_error_on_unknown_command() {
-        let input = "quit\n";
-        let mut output = Vec::new();
+    proptest! {
+        #[test]
+        fn run_loop_never_panics_on_arbitrary_input(random_input in "\\PC*") {
+            // Guard: don't let proptest trigger std::process::exit(0)
+            if random_input.trim().eq_ignore_ascii_case("quit") {
+                return Ok(());
+            }
 
-        run_loop(input.as_bytes(), &mut output);
+            let mut output_buffer = Vec::new();
 
-        let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("> "));
+            run_loop(random_input.as_bytes(), &mut output_buffer);
+        }
     }
+
+
 }
