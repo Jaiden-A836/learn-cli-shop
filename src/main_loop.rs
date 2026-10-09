@@ -1,58 +1,73 @@
-//! Main loop of the program.
+//! The main loop of the program.
 
-use crate::commands::Command;
+use crate::commands::{CommandRegistry, CommandType, HelpCommand, QuitCommand};
 use crate::errors::CommandError;
-use std::io::{self, Write};
-use strum::IntoEnumIterator;
+use std::io::{self, BufRead, Write};
 
 pub fn main_loop() {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_loop(stdin.lock(), stdout)
+}
+
+/// Core loop that works with any input and output stream.
+pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
+    let mut registry = CommandRegistry::new();
+    registry.register(CommandType::Help, Box::new(HelpCommand));
+    registry.register(CommandType::Quit, Box::new(QuitCommand));
+
     loop {
-        print!("> ");
-        io::stdout().flush().unwrap();
+        write!(writer, "> ").unwrap();
+        writer.flush().unwrap();
 
         let mut input = String::new();
 
-        let bytes_read = io::stdin().read_line(&mut input).unwrap();
+        // Read input
+        let bytes_read = reader.read_line(&mut input).unwrap();
 
+        // Check for EOF (Ctrl+D)
         if bytes_read == 0 {
-            println!("\nGoodbye!");
+            writeln!(writer, "\nGoodbye!").unwrap();
             break;
         }
 
-        match parse_command(input.trim()) {
-            Ok(Command::Help) => print_help(),
-            Ok(Command::Quit) => break,
-
+        // Parse input string into a CommandType
+        match CommandType::try_from(input.trim()) {
+            Ok(cmd_type) => {
+                // Dispatch execution to command registry
+                if let Err(err) = registry.dispatch(&cmd_type) {
+                    eprintln!("{}", err);
+                }
+            }
             Err(CommandError::EmptyInput) => continue,
-            Err(CommandError::UnknownCommand(cmd)) => {
-                CommandError::UnknownCommand(cmd).handle_error();
-            }
-            Err(CommandError::MissingArgument(msg)) => {
-                CommandError::MissingArgument(msg).handle_error();
-            }
-            _ => {}
+            Err(err) => eprintln!("{}", err),
         }
     }
 }
 
-/// Prints the help information for available commands.
-fn print_help() {
-    println!("Available commands:");
-    for cmd in Command::iter() {
-        println!("- {}", cmd.to_string().to_lowercase().trim());
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_loop_exits_on_quit_command() {
+        let input = "quit\n";
+        let mut output = Vec::new();
+
+        run_loop(input.as_bytes(), &mut output);
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("> "));
     }
-    println!();
-}
 
-/// Parses the input string and returns a 'Command' enum value or an error.
-fn parse_command(input: &str) -> Result<Command, CommandError> {
-    let mut parts = input.trim().split_whitespace();
+    #[test]
+    fn run_loop_prints_error_on_unknown_command() {
+        let input = "quit\n";
+        let mut output = Vec::new();
 
-    let cmd_str = parts.next().ok_or(CommandError::EmptyInput)?;
+        run_loop(input.as_bytes(), &mut output);
 
-    match cmd_str {
-        "help" => Ok(Command::Help),
-        "quit" => Ok(Command::Quit),
-        _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("> "));
     }
 }

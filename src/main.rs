@@ -1,8 +1,8 @@
-mod commands;
-mod main_loop;
-mod errors;
+//! The main starting point of the program.
 
-use std::io;
+pub mod commands;
+pub mod errors;
+pub mod main_loop;
 
 fn main() {
     main_loop::main_loop();

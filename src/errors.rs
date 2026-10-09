@@ -1,23 +1,18 @@
-use std::io;
+//! Holds all errors within the program.
 
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Error, Debug)]
 pub enum CommandError {
+    #[error("Please provide a command.")]
     EmptyInput,
-    UnknownCommand(String),
-    #[allow(dead_code)]
-    MissingArgument(String),
-}
 
-impl CommandError {
-    pub fn handle_error(&self) {
-        match self {
-            CommandError::EmptyInput => eprintln!("Please provide a command."),
-            CommandError::UnknownCommand(cmd) => {
-                eprintln!("Unknown command: '{}'. Type 'help'.", cmd);
-            }
-            CommandError::MissingArgument(msg) => {
-                eprintln!("Missing argument: '{}'", msg);
-            }
-        }
-    }
+    #[error("No commands available.")]
+    NoCommandsAvailable,
+
+    #[error("Unknown command: '{0}'. Type 'help'.")]
+    UnknownCommand(String),
+
+    #[error("Missing argument: '{0}'")]
+    MissingArgument(String),
 }
