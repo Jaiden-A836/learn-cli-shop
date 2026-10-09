@@ -2,24 +2,32 @@
 
 use crate::commands::{CommandRegistry, CommandType, HelpCommand, QuitCommand};
 use crate::errors::CommandError;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 
 pub fn main_loop() {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_loop(stdin.lock(), stdout)
+}
+
+/// Core loop that works with any input and output stream.
+pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
     let mut registry = CommandRegistry::new();
     registry.register(CommandType::Help, Box::new(HelpCommand));
     registry.register(CommandType::Quit, Box::new(QuitCommand));
 
     loop {
-        print!("> ");
-        io::stdout().flush().unwrap();
+        write!(writer, "> ").unwrap();
+        writer.flush().unwrap();
 
         let mut input = String::new();
 
-        let bytes_read = io::stdin().read_line(&mut input).unwrap();
+        // Read input
+        let bytes_read = reader.read_line(&mut input).unwrap();
 
         // Check for EOF (Ctrl+D)
         if bytes_read == 0 {
-            println!("\nGoodbye!");
+            writeln!(writer, "\nGoodbye!").unwrap();
             break;
         }
 
@@ -34,5 +42,32 @@ pub fn main_loop() {
             Err(CommandError::EmptyInput) => continue,
             Err(err) => eprintln!("{}", err),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_loop_exits_on_quit_command() {
+        let input = "quit\n";
+        let mut output = Vec::new();
+
+        run_loop(input.as_bytes(), &mut output);
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("> "));
+    }
+
+    #[test]
+    fn run_loop_prints_error_on_unknown_command() {
+        let input = "quit\n";
+        let mut output = Vec::new();
+
+        run_loop(input.as_bytes(), &mut output);
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("> "));
     }
 }
