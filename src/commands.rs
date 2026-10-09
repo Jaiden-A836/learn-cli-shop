@@ -1,6 +1,7 @@
 //! Manages and holds user commands.
 
 use crate::errors::CommandError;
+pub use builtin::*;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
@@ -17,9 +18,6 @@ pub struct CommandContext<'a> {
     pub registered_info: Vec<(&'static str, &'static str)>,
     pub writer: &'a mut dyn std::io::Write,
 }
-
-pub struct HelpCommand;
-pub struct QuitCommand;
 
 /// Manages commands
 pub struct CommandRegistry {
@@ -46,45 +44,6 @@ impl TryFrom<&str> for CommandType {
             "quit" => Ok(CommandType::Quit),
             _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
         }
-    }
-}
-
-impl Command for HelpCommand {
-    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
-        if CommandType::iter().count() == 0 {
-            return Err(CommandError::NoCommandsAvailable);
-        }
-
-        writeln!(ctx.writer, "Available commands:").unwrap();
-        for (name, desc) in &ctx.registered_info {
-            writeln!(ctx.writer, "- {:<8} : {}", name, desc).unwrap();
-        }
-        writeln!(ctx.writer).unwrap();
-
-        Ok(())
-    }
-
-    fn name(&self) -> &'static str {
-        "help"
-    }
-
-    fn description(&self) -> &'static str {
-        "Prints all available commands."
-    }
-}
-
-impl Command for QuitCommand {
-    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
-        writeln!(ctx.writer, "Quitting...").unwrap();
-        std::process::exit(0);
-    }
-
-    fn name(&self) -> &'static str {
-        "quit"
-    }
-
-    fn description(&self) -> &'static str {
-        "Quit the application."
     }
 }
 
@@ -121,6 +80,53 @@ impl CommandRegistry {
             cmd.execute(&mut ctx)
         } else {
             Err(CommandError::UnknownCommand(cmd_type.to_string()))
+        }
+    }
+}
+
+pub mod builtin {
+    use super::*;
+
+    pub struct HelpCommand;
+
+    impl Command for HelpCommand {
+        fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
+            if CommandType::iter().count() == 0 {
+                return Err(CommandError::NoCommandsAvailable);
+            }
+
+            writeln!(ctx.writer, "Available commands:").unwrap();
+            for (name, desc) in &ctx.registered_info {
+                writeln!(ctx.writer, "- {:<8} : {}", name, desc).unwrap();
+            }
+            writeln!(ctx.writer).unwrap();
+
+            Ok(())
+        }
+
+        fn name(&self) -> &'static str {
+            "help"
+        }
+
+        fn description(&self) -> &'static str {
+            "Prints all available commands."
+        }
+    }
+
+    pub struct QuitCommand;
+
+    impl Command for QuitCommand {
+        fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
+            writeln!(ctx.writer, "Quitting...").unwrap();
+            std::process::exit(0);
+        }
+
+        fn name(&self) -> &'static str {
+            "quit"
+        }
+
+        fn description(&self) -> &'static str {
+            "Quit the application."
         }
     }
 }
