@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
-#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash, Copy, Clone)]
+#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash)]
 pub enum CommandType {
     Help,
     Quit,
@@ -116,5 +116,39 @@ impl CommandRegistry {
         } else {
             Err(CommandError::UnknownCommand(cmd_type.to_string()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use claims::{assert_err_eq, assert_ok};
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("help", Ok(CommandType::Help))]
+    #[case("  QUIT \n", Ok(CommandType::Quit))]
+    #[case("   ", Err(CommandError::EmptyInput))]
+    #[case("unknown_cmd", Err(CommandError::UnknownCommand("unknown_cmd".to_string())))]
+    fn command_try_from(#[case] input: &str, #[case] expected: Result<CommandType, CommandError>) {
+        assert_eq!(CommandType::try_from(input), expected);
+    }
+
+    #[test]
+    fn dispatch_registered_command_succeeds() {
+        let mut registry = CommandRegistry::new();
+        registry.register(CommandType::Help, Box::new(HelpCommand));
+
+        assert_ok!(registry.dispatch(&CommandType::Help));
+    }
+
+    #[test]
+    fn dispatch_registered_command_returns_error() {
+        let mut registry = CommandRegistry::new();
+
+        assert_err_eq!(
+            registry.dispatch(&CommandType::Quit),
+            CommandError::UnknownCommand("Quit".to_string())
+        );
     }
 }
