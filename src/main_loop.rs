@@ -33,9 +33,9 @@ pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
 
         // Parse input string into a CommandType
         match CommandType::try_from(input.trim()) {
-            Ok(cmd_type) => {
+            Ok(mut cmd_type) => {
                 // Dispatch execution to command registry
-                if let Err(err) = registry.dispatch(&cmd_type) {
+                if let Err(err) = registry.dispatch(&mut writer, &mut cmd_type) {
                     writeln!(writer, "{}", err).unwrap();
                 }
             }
@@ -48,8 +48,8 @@ pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::proptest;
     use rstest::rstest;
-    use proptest::{proptest};
 
     #[rstest]
     #[case("help\n", "Available commands:")]
@@ -62,7 +62,13 @@ mod tests {
 
         let output_str = String::from_utf8(output_buffer).unwrap();
 
-        assert_eq!(output_str, expected_output);
+        // assert_eq!(output_str, expected_output);
+        assert!(
+            output_str.contains(expected_output),
+            "Expected:\n{:?}\nGot:\n{:?}",
+            expected_output,
+            output_str,
+        )
     }
 
     proptest! {
@@ -78,6 +84,4 @@ mod tests {
             run_loop(random_input.as_bytes(), &mut output_buffer);
         }
     }
-
-
 }

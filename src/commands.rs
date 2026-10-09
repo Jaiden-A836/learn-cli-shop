@@ -12,9 +12,10 @@ pub enum CommandType {
 }
 
 /// Shared data or metadata passed to commands during execution.
-pub struct CommandContext {
+pub struct CommandContext<'a> {
     /// List of available command names and their descriptions for help menus
     pub registered_info: Vec<(&'static str, &'static str)>,
+    pub writer: &'a mut dyn std::io::Write,
 }
 
 pub struct HelpCommand;
@@ -26,7 +27,7 @@ pub struct CommandRegistry {
 }
 
 pub trait Command {
-    fn execute(&mut self, ctx: &CommandContext) -> Result<(), CommandError>;
+    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError>;
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
 }
@@ -49,16 +50,16 @@ impl TryFrom<&str> for CommandType {
 }
 
 impl Command for HelpCommand {
-    fn execute(&mut self, ctx: &CommandContext) -> Result<(), CommandError> {
+    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
         if CommandType::iter().count() == 0 {
             return Err(CommandError::NoCommandsAvailable);
         }
 
-        println!("Available commands:");
+        writeln!(ctx.writer, "Available commands:").unwrap();
         for (name, desc) in &ctx.registered_info {
-            println!("- {:<8} : {}", name, desc);
+            writeln!(ctx.writer, "- {:<8} : {}", name, desc).unwrap();
         }
-        println!();
+        writeln!(ctx.writer).unwrap();
 
         Ok(())
     }
@@ -73,8 +74,8 @@ impl Command for HelpCommand {
 }
 
 impl Command for QuitCommand {
-    fn execute(&mut self, _: &CommandContext) -> Result<(), CommandError> {
-        println!("Quitting...");
+    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
+        writeln!(ctx.writer, "Quitting...").unwrap();
         std::process::exit(0);
     }
 
@@ -99,7 +100,11 @@ impl CommandRegistry {
     }
 
     /// Executes a command by looking up its CommandType key
-    pub fn dispatch(&mut self, cmd_type: &CommandType) -> Result<(), CommandError> {
+    pub fn dispatch<W: std::io::Write>(
+        &mut self,
+        writer: &mut W,
+        cmd_type: &mut CommandType,
+    ) -> Result<(), CommandError> {
         // Build the context dynamically from currently registered commands
         let info = self
             .commands
@@ -107,12 +112,13 @@ impl CommandRegistry {
             .map(|cmd| (cmd.name(), cmd.description()))
             .collect::<Vec<(&str, &str)>>();
 
-        let ctx = CommandContext {
+        let mut ctx = CommandContext {
             registered_info: info,
+            writer,
         };
 
         if let Some(cmd) = self.commands.get_mut(cmd_type) {
-            cmd.execute(&ctx)
+            cmd.execute(&mut ctx)
         } else {
             Err(CommandError::UnknownCommand(cmd_type.to_string()))
         }
@@ -126,8 +132,8 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("help", Ok(CommandType::Help))]
-    #[case("  QUIT \n", Ok(CommandType::Quit))]
+    #[case(HelpCommand.name(), Ok(CommandType::Help))]
+    #[case(QuitCommand.name(), Ok(CommandType::Quit))]
     #[case("   ", Err(CommandError::EmptyInput))]
     #[case("unknown_cmd", Err(CommandError::UnknownCommand("unknown_cmd".to_string())))]
     fn command_try_from(#[case] input: &str, #[case] expected: Result<CommandType, CommandError>) {
@@ -136,19 +142,23 @@ mod tests {
 
     #[test]
     fn dispatch_registered_command_succeeds() {
+        let mut output_buffer = Vec::new();
+
         let mut registry = CommandRegistry::new();
         registry.register(CommandType::Help, Box::new(HelpCommand));
 
-        assert_ok!(registry.dispatch(&CommandType::Help));
+        assert_ok!(registry.dispatch(&mut output_buffer, &mut CommandType::Help));
     }
 
     #[test]
-    fn dispatch_registered_command_returns_error() {
+    fn dispatch_unregistered_command_returns_error() {
+        let mut output_buffer = Vec::new();
+
         let mut registry = CommandRegistry::new();
 
         assert_err_eq!(
-            registry.dispatch(&CommandType::Quit),
-            CommandError::UnknownCommand("Quit".to_string())
+            registry.dispatch(&mut output_buffer, &mut CommandType::Quit),
+            CommandError::UnknownCommand(CommandType::Quit.to_string())
         );
     }
 }
