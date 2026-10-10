@@ -2,45 +2,48 @@
 
 use crate::commands::{CommandRegistry, CommandType, HelpCommand, QuitCommand};
 use crate::errors::CommandError;
+use anyhow::{Context, Result};
 use std::io::{self, BufRead, Write};
 
-pub fn main_loop() {
+pub fn main_loop() -> Result<()> {
     let stdin = io::stdin();
     let stdout = io::stdout();
-    run_loop(stdin.lock(), stdout)
+    run_loop(stdin.lock(), stdout).context("Fatal error in application main loop.")
 }
 
 /// Core loop that works with any input and output stream.
-pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
+pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) -> Result<()> {
     let mut registry = CommandRegistry::new();
     registry.register(CommandType::Help, Box::new(HelpCommand));
     registry.register(CommandType::Quit, Box::new(QuitCommand));
 
     loop {
-        write!(writer, "> ").unwrap();
-        writer.flush().unwrap();
+        write!(writer, "> ").context("Failed to write prompt symbol.")?;
+        writer.flush().context("Failed to flush writer buffer.")?;
 
         let mut input = String::new();
 
         // Read input
-        let bytes_read = reader.read_line(&mut input).unwrap();
+        let bytes_read = reader
+            .read_line(&mut input)
+            .context("Failed to read line from input stream.")?;
 
         // Check for EOF (Ctrl+D)
         if bytes_read == 0 {
-            writeln!(writer, "\nGoodbye!").unwrap();
-            break;
+            writeln!(writer, "\nGoodbye!")?;
+            break Ok(());
         }
 
         // Parse input string into a CommandType
         match CommandType::try_from(input.trim()) {
-            Ok(mut cmd_type) => {
+            Ok(cmd_type) => {
                 // Dispatch execution to command registry
-                if let Err(err) = registry.dispatch(&mut writer, &mut cmd_type) {
-                    writeln!(writer, "{}", err).unwrap();
+                if let Err(err) = registry.dispatch(&mut writer, &cmd_type) {
+                    writeln!(writer, "{:?}", err)?;
                 }
             }
             Err(CommandError::EmptyInput) => continue,
-            Err(err) => writeln!(writer, "{}", err).unwrap(),
+            Err(err) => writeln!(writer, "{}", err)?,
         }
     }
 }
@@ -58,7 +61,7 @@ mod tests {
     #[case("", "Goodbye!")]
     fn run_loop_behavior(#[case] input: &str, #[case] expected_output: &str) {
         let mut output_buffer = Vec::new();
-        run_loop(input.as_bytes(), &mut output_buffer);
+        run_loop(input.as_bytes(), &mut output_buffer).unwrap();
 
         let output_str = String::from_utf8(output_buffer).unwrap();
 
@@ -81,7 +84,7 @@ mod tests {
 
             let mut output_buffer = Vec::new();
 
-            run_loop(random_input.as_bytes(), &mut output_buffer);
+            run_loop(random_input.as_bytes(), &mut output_buffer).unwrap();
         }
     }
 }

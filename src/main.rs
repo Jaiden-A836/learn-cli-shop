@@ -3,7 +3,12 @@
 pub mod commands;
 pub mod errors;
 pub mod main_loop;
+pub mod state;
+pub mod tags;
 
-fn main() {
-    main_loop::main_loop();
+use anyhow::Result;
+
+fn main() -> Result<()> {
+    main_loop::main_loop()?;
+    Ok(())
 }

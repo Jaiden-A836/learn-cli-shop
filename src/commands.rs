@@ -1,12 +1,13 @@
 //! Manages and holds user commands.
 
 use crate::errors::CommandError;
+use anyhow::{Context, Result, bail};
 pub use builtin::*;
 use std::collections::HashMap;
 use strum_macros::{Display, EnumIter};
 
 pub trait Command {
-    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError>;
+    fn execute(&mut self, ctx: &mut CommandContext) -> Result<()>;
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
 }
@@ -27,7 +28,7 @@ pub enum CommandType {
 impl TryFrom<&str> for CommandType {
     type Error = CommandError;
 
-    fn try_from(input: &str) -> Result<Self, Self::Error> {
+    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
         let mut parts = input.split_whitespace();
 
         // Returns `CommandError::EmptyInput` if user hits Enter on blank line
@@ -61,8 +62,8 @@ impl CommandRegistry {
     pub fn dispatch<W: std::io::Write>(
         &mut self,
         writer: &mut W,
-        cmd_type: &mut CommandType,
-    ) -> Result<(), CommandError> {
+        cmd_type: &CommandType,
+    ) -> Result<()> {
         // Build the context dynamically from currently registered commands
         let info = self
             .commands
@@ -76,9 +77,11 @@ impl CommandRegistry {
         };
 
         if let Some(cmd) = self.commands.get_mut(cmd_type) {
+            // Gives context if command execution fails.
             cmd.execute(&mut ctx)
+                .with_context(|| format!("Failed to execute command with type {}", cmd_type))
         } else {
-            Err(CommandError::UnknownCommand(cmd_type.to_string()))
+            bail!(CommandError::UnknownCommand(cmd_type.to_string()))
         }
     }
 }
@@ -94,22 +97,24 @@ pub mod builtin {
 
     use super::{Command, CommandContext, CommandType};
     use crate::errors::CommandError;
+    use anyhow::{Context, Result, bail};
     use strum::IntoEnumIterator;
 
     pub struct HelpCommand;
     pub struct QuitCommand;
 
     impl Command for HelpCommand {
-        fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
+        fn execute(&mut self, ctx: &mut CommandContext) -> Result<()> {
             if CommandType::iter().count() == 0 {
-                return Err(CommandError::NoCommandsAvailable);
+                bail!(CommandError::NoCommandsAvailable);
             }
 
-            writeln!(ctx.writer, "Available commands:").unwrap();
+            writeln!(ctx.writer, "Available commands:").context("Unable to output help header")?;
             for (name, desc) in &ctx.registered_info {
-                writeln!(ctx.writer, "- {:<8} : {}", name, desc).unwrap();
+                writeln!(ctx.writer, "- {:<8} : {}", name, desc)
+                    .context("Failed to write command list item")?;
             }
-            writeln!(ctx.writer).unwrap();
+            writeln!(ctx.writer).context("Unable to output final newline")?;
 
             Ok(())
         }
@@ -124,8 +129,8 @@ pub mod builtin {
     }
 
     impl Command for QuitCommand {
-        fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
-            writeln!(ctx.writer, "Quitting...").unwrap();
+        fn execute(&mut self, ctx: &mut CommandContext) -> Result<()> {
+            writeln!(ctx.writer, "Quitting...").context("Unable to output quit message")?;
             std::process::exit(0);
         }
 
@@ -142,7 +147,7 @@ pub mod builtin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use claims::{assert_err_eq, assert_ok};
+    use claims::assert_ok;
     use rstest::rstest;
 
     #[rstest]
@@ -170,9 +175,10 @@ mod tests {
 
         let mut registry = CommandRegistry::new();
 
-        assert_err_eq!(
-            registry.dispatch(&mut output_buffer, &mut CommandType::Quit),
-            CommandError::UnknownCommand(CommandType::Quit.to_string())
+        assert!(
+            registry
+                .dispatch(&mut output_buffer, &mut CommandType::Quit)
+                .is_err()
         );
     }
 }
