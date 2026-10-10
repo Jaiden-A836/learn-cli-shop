@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
 claims = "0.8.0"
 rstest = "0.27.0"
 strum = "0.28.0"
