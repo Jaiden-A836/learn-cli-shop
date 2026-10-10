@@ -3,13 +3,12 @@
 use crate::errors::CommandError;
 pub use builtin::*;
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
-#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash)]
-pub enum CommandType {
-    Help,
-    Quit,
+pub trait Command {
+    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError>;
+    fn name(&self) -> &'static str;
+    fn description(&self) -> &'static str;
 }
 
 /// Shared data or metadata passed to commands during execution.
@@ -19,22 +18,17 @@ pub struct CommandContext<'a> {
     pub writer: &'a mut dyn std::io::Write,
 }
 
-/// Manages commands
-pub struct CommandRegistry {
-    commands: HashMap<CommandType, Box<dyn Command>>,
-}
-
-pub trait Command {
-    fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError>;
-    fn name(&self) -> &'static str;
-    fn description(&self) -> &'static str;
+#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash)]
+pub enum CommandType {
+    Help,
+    Quit,
 }
 
 impl TryFrom<&str> for CommandType {
     type Error = CommandError;
 
     fn try_from(input: &str) -> Result<Self, Self::Error> {
-        let mut parts = input.trim().split_whitespace();
+        let mut parts = input.split_whitespace();
 
         // Returns `CommandError::EmptyInput` if user hits Enter on blank line
         let cmd_str = parts.next().ok_or(CommandError::EmptyInput)?.to_lowercase();
@@ -45,6 +39,11 @@ impl TryFrom<&str> for CommandType {
             _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
         }
     }
+}
+
+/// Manages commands
+pub struct CommandRegistry {
+    commands: HashMap<CommandType, Box<dyn Command>>,
 }
 
 impl CommandRegistry {
@@ -84,10 +83,21 @@ impl CommandRegistry {
     }
 }
 
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub mod builtin {
-    use super::*;
+    //! Implemented commands such as the help command or quit command.
+
+    use super::{Command, CommandContext, CommandType};
+    use crate::errors::CommandError;
+    use strum::IntoEnumIterator;
 
     pub struct HelpCommand;
+    pub struct QuitCommand;
 
     impl Command for HelpCommand {
         fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
@@ -112,8 +122,6 @@ pub mod builtin {
             "Prints all available commands."
         }
     }
-
-    pub struct QuitCommand;
 
     impl Command for QuitCommand {
         fn execute(&mut self, ctx: &mut CommandContext) -> Result<(), CommandError> {
