@@ -1,6 +1,7 @@
 //! The main starting point of the program.
 
 pub mod commands;
+pub mod ecs;
 pub mod errors;
 pub mod main_loop;
 pub mod state;
