@@ -34,11 +34,19 @@ pub fn run_loop<R: BufRead, W: Write>(mut reader: R, mut writer: W) -> Result<()
             break Ok(());
         }
 
+        let words = input.split_whitespace().collect::<Vec<&str>>();
+
+        if words.is_empty() {
+            continue;
+        }
+
+        let args = &words[1..];
+
         // Parse input string into a CommandType
-        match CommandType::try_from(input.trim()) {
+        match CommandType::try_from(&words[..]) {
             Ok(cmd_type) => {
                 // Dispatch execution to command registry
-                if let Err(err) = registry.dispatch(&mut writer, &cmd_type) {
+                if let Err(err) = registry.dispatch(&mut writer, &cmd_type, args) {
                     writeln!(writer, "{:?}", err)?;
                 }
             }

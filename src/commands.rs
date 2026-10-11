@@ -4,7 +4,7 @@ use crate::errors::CommandError;
 use anyhow::{Context, Result, bail};
 pub use builtin::*;
 use std::collections::HashMap;
-use strum_macros::{Display, EnumIter};
+use strum_macros::{Display, EnumIter, EnumString};
 
 pub trait Command {
     fn execute(&mut self, ctx: &mut CommandContext) -> Result<()>;
@@ -17,28 +17,27 @@ pub struct CommandContext<'a> {
     /// List of available command names and their descriptions for help menus
     pub registered_info: Vec<(&'static str, &'static str)>,
     pub writer: &'a mut dyn std::io::Write,
+    pub args: &'a [&'a str]
 }
 
-#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash)]
+#[derive(Debug, Display, EnumIter, Eq, PartialEq, Hash, EnumString)]
+#[strum(ascii_case_insensitive)] // Makes "HELP", "help", and "Help" all work automatically
 pub enum CommandType {
     Help,
     Quit,
 }
 
-impl TryFrom<&str> for CommandType {
+impl TryFrom<&[&str]> for CommandType {
     type Error = CommandError;
 
-    fn try_from(input: &str) -> std::result::Result<Self, Self::Error> {
-        let mut parts = input.split_whitespace();
-
+    fn try_from(input: &[&str]) -> std::result::Result<Self, Self::Error> {
         // Returns `CommandError::EmptyInput` if user hits Enter on blank line
-        let cmd_str = parts.next().ok_or(CommandError::EmptyInput)?.to_lowercase();
+        let cmd_str = input.first().ok_or(CommandError::EmptyInput)?;
 
-        match cmd_str.as_str() {
-            "help" => Ok(CommandType::Help),
-            "quit" => Ok(CommandType::Quit),
-            _ => Err(CommandError::UnknownCommand(cmd_str.to_string())),
-        }
+        // Dereferencing allows .parse to work with strum
+        (*cmd_str)
+            .parse::<CommandType>()
+            .map_err(|_| CommandError::UnknownCommand(cmd_str.to_string()))
     }
 }
 
@@ -63,6 +62,7 @@ impl CommandRegistry {
         &mut self,
         writer: &mut W,
         cmd_type: &CommandType,
+        args: &[&str],
     ) -> Result<()> {
         // Build the context dynamically from currently registered commands
         let info = self
@@ -74,6 +74,7 @@ impl CommandRegistry {
         let mut ctx = CommandContext {
             registered_info: info,
             writer,
+            args,
         };
 
         if let Some(cmd) = self.commands.get_mut(cmd_type) {
@@ -156,7 +157,8 @@ mod tests {
     #[case("   ", Err(CommandError::EmptyInput))]
     #[case("unknown_cmd", Err(CommandError::UnknownCommand("unknown_cmd".to_string())))]
     fn command_try_from(#[case] input: &str, #[case] expected: Result<CommandType, CommandError>) {
-        assert_eq!(CommandType::try_from(input), expected);
+        let words = input.split_whitespace().collect::<Vec<&str>>();
+        assert_eq!(CommandType::try_from(&words[..]), expected);
     }
 
     #[test]
@@ -166,7 +168,7 @@ mod tests {
         let mut registry = CommandRegistry::new();
         registry.register(CommandType::Help, Box::new(HelpCommand));
 
-        assert_ok!(registry.dispatch(&mut output_buffer, &mut CommandType::Help));
+        assert_ok!(registry.dispatch(&mut output_buffer, &CommandType::Help, &[]));
     }
 
     #[test]
@@ -177,7 +179,7 @@ mod tests {
 
         assert!(
             registry
-                .dispatch(&mut output_buffer, &mut CommandType::Quit)
+                .dispatch(&mut output_buffer, &CommandType::Quit, &[])
                 .is_err()
         );
     }
